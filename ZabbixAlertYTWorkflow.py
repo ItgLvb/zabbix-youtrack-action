@@ -11,48 +11,25 @@ import sys
 import urllib
 import logging
 import time
-
+import settings
 from youtrack.connection import Connection
 import re
-from requests.packages.urllib3 import disable_warnings
-
-
-disable_warnings()  # disable ssl certificate errors
-
-# ------------ START Constants ------------
-YT_PROJECT_NAME = 'CM'  # ID project in Youtrack
-YT_ASSIGNEE = 'Zabbix'  # Assignee to after create issue
-YT_TYPE = 'Error'  # Youtrack Issue type
-YT_SERVICE = 'Zabbix'  # Youtrack Issue service
-YT_SUBSYSTEM = 'DevOps'  # Youtrack Issue subsystem
-YT_USER = 'Zabbix'  # Youtrack Issue create user
-YT_PASSWORD = sys.argv[4]  # Youtrack user password
-YT_TIME = 'About 1 hour'  # Estimated time
-# YT_TIME = 'Undefined'  # Estimated time
-YT_COMMENT = "Now is {status}. \n{text}\n\n"  # Add this comment in issue
-LOG_FILE_NAME = '/var/log/zabbix/PtZabbixAlertYTWorkflow.log'  # Path to Log-file for debug
-# LOG_FILE_NAME = 'PtZabbixAlertYTWorkflow.log'  # Uncomment for debug in Windows-OS
-
-ZABBIX_SERVER = "https://zabbix.example.com/zabbix"
-ZBX_USER = "zabbix_api"
-ZBX_PASSWORD = sys.argv[5]
-# ------------ END Constants ------------
 
 # ------------ START Setup logging ------------
 # Use logger to log information
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(settings.LOG_LEVEL)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
 # Log to file
-fh = logging.FileHandler(LOG_FILE_NAME)
-fh.setLevel(logging.DEBUG)
+fh = logging.FileHandler(settings.LOG_FILE_NAME)
+fh.setLevel(settings.LOG_LEVEL)
 fh.setFormatter(formatter)
 logger.addHandler(fh)
 
 # Log to stdout
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(settings.LOG_LEVEL)
 ch.setFormatter(formatter)
 logger.addHandler(ch)  # Use logger to log information
 
@@ -60,14 +37,14 @@ logger.addHandler(ch)  # Use logger to log information
 log = logging.getLogger('pyzabbix')
 log.addHandler(ch)
 log.addHandler(fh)
-log.setLevel(logging.DEBUG)
+log.setLevel(settings.LOG_LEVEL)
 # ------------ END Setup logging ------------
 
 
 # ------------ START ZabbixAPI block ------------
-Zbx = ZabbixAPI(ZABBIX_SERVER)
+Zbx = ZabbixAPI(settings.ZABBIX_SERVER)
 Zbx.session.verify = False
-Zbx.login(ZBX_USER, ZBX_PASSWORD)
+Zbx.login(settings.ZBX_USER, settings.ZBX_PASSWORD)
 
 
 # ------------ END ZabbixAPI block ------------
@@ -124,7 +101,7 @@ def Main(sendTo, subject, yamlMessage):
     searchString = "Hostname: '{}'".format(messages['Hostname'])
     linkToHostIssue = "{youtrack}/issues/{projectname}?q={query}".format(
         youtrack=sendTo,
-        projectname=YT_PROJECT_NAME,
+        projectname=settings.YT_PROJECT_NAME,
         query=urllib.parse.quote(searchString, safe='')
     )
 
@@ -145,7 +122,7 @@ def Main(sendTo, subject, yamlMessage):
     # ----- START Youtrack current week -----
 
     # Create connect to Youtrack API
-    connection = Connection(sendTo, YT_USER, YT_PASSWORD)
+    connection = Connection(sendTo, settings.YT_USER, settings.YT_PASSWORD)
 
     # Get current week in YT format (Sprint planned)
     version = connection.getAllBundles('version')
@@ -162,7 +139,7 @@ def Main(sendTo, subject, yamlMessage):
     createNewIssue = False
 
     logger.debug("Get issue with text '{}'".format(messages['TriggerID']))
-    issue = connection.getIssues(YT_PROJECT_NAME,
+    issue = connection.getIssues(settings.YT_PROJECT_NAME,
                                  "ZabbixTriggerID::{}".format(messages['TriggerID']),
                                  0,
                                  1)
@@ -183,13 +160,13 @@ def Main(sendTo, subject, yamlMessage):
     # Create new issue
     if createNewIssue:
         logger.debug("Create new issue because it is not exist")
-        issue = connection.createIssue(YT_PROJECT_NAME,
+        issue = connection.createIssue(settings.YT_PROJECT_NAME,
                                        'Unassigned',
                                        ytName,
                                        issueDescription,
                                        priority=ytPriority,
-                                       subsystem=YT_SUBSYSTEM,
-                                       type=YT_TYPE,
+                                       subsystem=settings.YT_SUBSYSTEM,
+                                       type=settings.YT_TYPE,
                                        )
         time.sleep(3)
 
@@ -201,7 +178,7 @@ def Main(sendTo, subject, yamlMessage):
     logger.debug("Issue have id={}".format(issueId))
 
     # Set issue service
-    ExecAndLog(connection, issueId, "Service {}".format(YT_SERVICE))
+    ExecAndLog(connection, issueId, "Service {}".format(settings.YT_SERVICE))
 
     # Update priority
     ExecAndLog(connection, issueId, "Priority {}".format(ytPriority))
@@ -215,7 +192,7 @@ def Main(sendTo, subject, yamlMessage):
         if issue['State'] != 'Hold on':
 
             # Estimated time
-            ExecAndLog(connection, issueId, "Estimated time {}".format(YT_TIME))
+            ExecAndLog(connection, issueId, "Estimated time {}".format(settings.YT_TIME))
 
             # Update fix version
             ExecAndLog(connection=connection, issueId=issueId, command="Sprint planned {}".format(fixVersionWeek))
@@ -241,7 +218,7 @@ def Main(sendTo, subject, yamlMessage):
                                                                   ))
         connection.executeCommand(issueId=issueId,
                                   command="",
-                                  comment=YT_COMMENT.format(
+                                  comment=settings.YT_COMMENT.format(
                                       status=messages['Status'],
                                       text=messages['Text'])
                                   )
@@ -262,7 +239,7 @@ def Main(sendTo, subject, yamlMessage):
             ExecAndLog(connection, issueId, command="State Cancel")
 
             # Assignee issue
-            ExecAndLog(connection, issueId, command="Assignee {}".format(YT_ASSIGNEE))
+            ExecAndLog(connection, issueId, command="Assignee {}".format(settings.YT_ASSIGNEE))
 
         if issue['State'] == 'Fixed':
             # Verify if Fixed
@@ -273,7 +250,7 @@ def Main(sendTo, subject, yamlMessage):
                                                                   ))
         connection.executeCommand(issueId=issueId,
                                   command="",
-                                  comment=YT_COMMENT.format(
+                                  comment=settings.YT_COMMENT.format(
                                       status=messages['Status'],
                                       text=messages['Text'])
                                   )
