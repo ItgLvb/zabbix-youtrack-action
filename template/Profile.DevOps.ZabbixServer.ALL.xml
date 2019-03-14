@@ -11,8 +11,7 @@
         <template>
             <template>Profile.DevOps.ZabbixServer.ALL</template>
             <name>Profile.DevOps.ZabbixServer.ALL</name>
-            <description>WIKI: https://wiki.ptsecurity.com/x/nplIAQ&#13;
-Profile WIKI: https://wiki.ptsecurity.com/x/cACrAQ</description>
+            <description/>
             <groups>
                 <group>
                     <name>Profiles.DevOps</name>
@@ -78,12 +77,12 @@ Profile WIKI: https://wiki.ptsecurity.com/x/cACrAQ</description>
     </templates>
     <triggers>
         <trigger>
-            <expression>{Profile.DevOps.ZabbixServer.ALL:zabbix_server_ptzabbixalertytworkflow.py.last()}=0</expression>
+            <expression/>
             <name>Error in /var/log/zabbix/PtZabbixAlertYTWorkflow.log</name>
             <url/>
             <status>0</status>
             <priority>4</priority>
-            <description>Profile WIKI: https://wiki.ptsecurity.com/x/cACrAQ</description>
+            <description/>
             <type>0</type>
             <dependencies/>
         </trigger>
