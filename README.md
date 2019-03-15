@@ -30,9 +30,9 @@ Create issue in Youtrack from Zabbix
    Text: '{ITEM.NAME1} ({HOST.NAME1}:{ITEM.KEY1}): {ITEM.VALUE1}'  
    Hostname: '{HOST.NAME1}'  
    Status: '{TRIGGER.STATUS}'  
-   Severity: "{TRIGGER.SEVERITY}"  
-   EventID: "{EVENT.ID}"  
-   TriggerID: "{TRIGGER.ID}"  
+   Severity: '{TRIGGER.SEVERITY}'  
+   EventID: '{EVENT.ID}'
+   TriggerID: "'TRIGGER.ID}'  
   *Send to **YT** via **YT-WORKFLOW**  
 
 5. Assign **Profile.DevOps.ZabbixServer.ALL** to Zabbix Server

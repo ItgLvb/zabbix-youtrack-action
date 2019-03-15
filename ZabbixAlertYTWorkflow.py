@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # (c) DevOpsHQ, 2016
 
@@ -8,12 +8,14 @@ import yaml
 
 from pyzabbix import ZabbixAPI
 import sys
-import urllib
+from six.moves.urllib.parse import quote
 import logging
 import time
 import settings
 from youtrack.connection import Connection
 import re
+
+
 
 # ------------ START Setup logging ------------
 # Use logger to log information
@@ -42,7 +44,7 @@ log.setLevel(settings.LOG_LEVEL)
 
 
 # ------------ START ZabbixAPI block ------------
-Zbx = ZabbixAPI(settings.ZABBIX_SERVER)
+Zbx = ZabbixAPI(settings.ZBX_SERVER)
 Zbx.session.verify = False
 Zbx.login(settings.ZBX_USER, settings.ZBX_PASSWORD)
 
@@ -63,6 +65,12 @@ def ExecAndLog(connection, issueId, command="", comment=""):
 
 # ------------ END Function declaration ------------
 
+def updateIssue(connection, issueId, summary, description):
+    connection._req('POST', "/issue/{issueId}?summary={summary}&description={description}".format(
+        issueId=issueId,
+        summary=quote(summary),
+        description=quote(description)
+    ))
 
 def Main(sendTo, subject, yamlMessage):
     """
@@ -102,7 +110,7 @@ def Main(sendTo, subject, yamlMessage):
     linkToHostIssue = "{youtrack}/issues/{projectname}?q={query}".format(
         youtrack=sendTo,
         projectname=settings.YT_PROJECT_NAME,
-        query=urllib.parse.quote(searchString, safe='')
+        query=quote(searchString, safe='')
     )
 
     issueDescription = """
@@ -110,28 +118,18 @@ def Main(sendTo, subject, yamlMessage):
 -----
 {yamlMessage}
 -----
-- [https://zabbix.example.com/zabbix.php?action=dashboard.view Zabbix Dashboard]
+- [{zabbix}?action=dashboard.view Zabbix Dashboard]
 - Show [{linkToHostIssue} all issue for *this host*]
 """.format(
         ytName=ytName,
         yamlMessage=yamlMessage,
+        zabbix=settings.ZBX_SERVER,
         linkToHostIssue=linkToHostIssue, )
 
     # ----- END Youtrack Issue description -----
 
-    # ----- START Youtrack current week -----
-
     # Create connect to Youtrack API
-    connection = Connection(sendTo, settings.YT_USER, settings.YT_PASSWORD)
-
-    # Get current week in YT format (Sprint planned)
-    version = connection.getAllBundles('version')
-
-    for fixVersion in version[0].values:
-        if fixVersion['archived'] == False and fixVersion['released'] == False:
-            fixVersionWeek = fixVersion['name']
-            break
-    # ----- END Youtrack current week -----
+    connection = Connection(sendTo, token=settings.YT_TOKEN)
 
     # ----- START Youtrack get or create issue -----
     # Get issue if exist
@@ -166,19 +164,21 @@ def Main(sendTo, subject, yamlMessage):
                                        issueDescription,
                                        priority=ytPriority,
                                        subsystem=settings.YT_SUBSYSTEM,
+                                       state="Open",
                                        type=settings.YT_TYPE,
                                        )
         time.sleep(3)
 
         # Parse ID for new issue
-        result = re.search(r'(CM-\d*)', issue[0]['location'])
+        result = re.search(r'(PI-\d*)', issue[0]['location'])
+
         issueId = result.group(0)
         issue = connection.getIssue(issueId)
 
     logger.debug("Issue have id={}".format(issueId))
 
     # Set issue service
-    ExecAndLog(connection, issueId, "Service {}".format(settings.YT_SERVICE))
+    ExecAndLog(connection, issueId, "Исполнитель {}".format(settings.YT_SERVICE))
 
     # Update priority
     ExecAndLog(connection, issueId, "Priority {}".format(ytPriority))
@@ -188,19 +188,10 @@ def Main(sendTo, subject, yamlMessage):
     # ----- START PROBLEM block ------
     if messages['Status'] == "PROBLEM":
 
-        # Issue exist and NOT Hold on, Unnassigned and Estimated time set
-        if issue['State'] != 'Hold on':
-
-            # Estimated time
-            ExecAndLog(connection, issueId, "Estimated time {}".format(settings.YT_TIME))
-
-            # Update fix version
-            ExecAndLog(connection=connection, issueId=issueId, command="Sprint planned {}".format(fixVersionWeek))
-
         # Reopen if Fixed or Verified or Canceled
-        if issue['State'] == 'Fixed' or issue['State'] == 'Verified' or issue['State'] == 'Canceled':
+        if issue['State'] == u"На тестировании" or issue['State'] == u"Завершена" or issue['State'] == u"Исполнение не планируется":
             # Reopen Issue
-            ExecAndLog(connection, issueId, "State reopen")
+            ExecAndLog(connection, issueId, "State Open")
 
             # Assignee issue
             ExecAndLog(connection, issueId, command="Assignee Unassigned")
@@ -209,7 +200,7 @@ def Main(sendTo, subject, yamlMessage):
         logger.debug("Run command in {issueId}: {command}".format(issueId=issueId,
                                                                   command="""Update summary and description with connection.updateIssue method"""
                                                                   ))
-        connection.updateIssue(issueId=issueId, summary=ytName, description=issueDescription)
+        updateIssue(connection, issueId=issueId, summary=ytName, description=issueDescription)
 
         # Add comment
         logger.debug("Run command in {issueId}: {command}".format(issueId=issueId,
@@ -227,23 +218,19 @@ def Main(sendTo, subject, yamlMessage):
         logger.debug("ZABBIX-API: Send Youtrack ID to {}".format(messages['EventID']))
         Zbx.event.acknowledge(eventids=messages['EventID'], message="Create Youtrack task")
         Zbx.event.acknowledge(eventids=messages['EventID'],
-                              message="https://youtrack.example.com/issue/{}".format(issueId))
+                              message=(settings.YT_SERVER + "/issue/{}").format(issueId))
     # ----- End PROBLEM block ------
 
 
     # ----- Start OK block -----
     if messages['Status'] == "OK":
 
-        if issue['State'] == 'Hold on' or issue['State'] == 'Registered':
-            # Cancel if not in work
-            ExecAndLog(connection, issueId, command="State Cancel")
-
-            # Assignee issue
-            ExecAndLog(connection, issueId, command="Assignee {}".format(settings.YT_ASSIGNEE))
-
-        if issue['State'] == 'Fixed':
+        if issue['State'] == u"На тестировании":
             # Verify if Fixed
-            ExecAndLog(connection, issueId, command="State verify")
+            ExecAndLog(connection, issueId, command="State Завершена")
+        else:
+            if issue['State'] == u"Открыта":
+                ExecAndLog(connection, issueId, command="State Исполнение не планируется")
 
         logger.debug("Run command in {issueId}: {command}".format(issueId=issueId,
                                                                   command="""Now is OK {}""".format(messages['Text'])
@@ -264,7 +251,7 @@ if __name__ == "__main__":
     try:
         Main(
             # Arguments WIKI: https://www.zabbix.com/documentation/3.0/ru/manual/config/notifications/media/script
-            sys.argv[1],  # to
+            settings.YT_SERVER,  # to
             sys.argv[2],  # subject
             sys.argv[3],  # body
 
@@ -276,3 +263,4 @@ if __name__ == "__main__":
     except Exception:
         logger.exception("Exit with error")  # Output exception
         exit(1)
+
