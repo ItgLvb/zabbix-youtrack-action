@@ -192,8 +192,8 @@ def Main(sendTo, subject, yamlMessage):
             # Reopen Issue
             ExecAndLog(connection, issueId, "State Open")
 
-            # Assignee issue
-            ExecAndLog(connection, issueId, command="Assignee Unassigned")
+            # Исполнитель issue
+            ExecAndLog(connection, issueId, command="Исполнитель Unassigned")
         # Update summary and description for issue
         logger.debug("Run command in {issueId}: {command}".format(issueId=issueId,
                                                                   command="""Update summary and description with connection.updateIssue method"""
@@ -214,8 +214,8 @@ def Main(sendTo, subject, yamlMessage):
 
         # Send ID to Zabbix:
         logger.debug("ZABBIX-API: Send Youtrack ID to {}".format(messages['EventID']))
-        Zbx.event.acknowledge(eventids=messages['EventID'], message="Create Youtrack task")
-        Zbx.event.acknowledge(eventids=messages['EventID'],
+        Zbx.event.acknowledge(eventids=messages['EventID'], action=4, message="Create Youtrack task")
+        Zbx.event.acknowledge(eventids=messages['EventID'], action=4,
                               message=(settings.YT_SERVER + "/issue/{}").format(issueId))
     # ----- End PROBLEM block ------
 
@@ -250,8 +250,8 @@ if __name__ == "__main__":
         Main(
             # Arguments WIKI: https://www.zabbix.com/documentation/3.0/ru/manual/config/notifications/media/script
             settings.YT_SERVER,  # to
-            sys.argv[2],  # subject
-            sys.argv[3],  # body
+            sys.argv[2].decode('utf-8'),  # subject
+            sys.argv[3].decode('utf-8'),  # body
 
             # FYI: Next argument used in code:
             # sys.argv[4],  # YT_PASSWORD
