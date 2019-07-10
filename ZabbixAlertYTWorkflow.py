@@ -14,8 +14,8 @@ import time
 import settings
 from youtrack.connection import Connection
 import re
-
-
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ------------ START Setup logging ------------
 # Use logger to log information
@@ -82,13 +82,13 @@ def Main(sendTo, subject, yamlMessage):
     """
 
     # ----- Use below example yamlMessage to debug -----
-#     yamlMessage = """Name: 'Test Zabbix-YT workflow, ignore it'
-# Text: 'Agent ping (server:agent.ping()): DOWN (1) '
-# Hostname: 'server.exmpale.ru'
-# Status: "OK"
-# Severity: "High"
-# EventID: "96976"
-# TriggerID: "123456789012" """
+    #     yamlMessage = """Name: 'Test Zabbix-YT workflow, ignore it'
+    # Text: 'Agent ping (server:agent.ping()): DOWN (1) '
+    # Hostname: 'server.exmpale.ru'
+    # Status: "OK"
+    # Severity: "High"
+    # EventID: "96976"
+    # TriggerID: "123456789012" """
 
     messages = yaml.load(yamlMessage)
 
@@ -118,8 +118,8 @@ def Main(sendTo, subject, yamlMessage):
 -----
 {yamlMessage}
 -----
-- [{zabbix}?action=dashboard.view Zabbix Dashboard]
-- Show [{linkToHostIssue} all issue for *this host*]
+- [Zabbix Dashboard]({zabbix}?action=dashboard.view)
+- Show  all issue for [*this host*]({linkToHostIssue})
 """.format(
         ytName=ytName,
         yamlMessage=yamlMessage,
@@ -182,7 +182,6 @@ def Main(sendTo, subject, yamlMessage):
 
     # Update priority
     ExecAndLog(connection, issueId, "Priority {}".format(ytPriority))
-
     # ----- END Youtrack get or create issue -----
 
     # ----- START PROBLEM block ------
@@ -195,7 +194,6 @@ def Main(sendTo, subject, yamlMessage):
 
             # Assignee issue
             ExecAndLog(connection, issueId, command="Assignee Unassigned")
-
         # Update summary and description for issue
         logger.debug("Run command in {issueId}: {command}".format(issueId=issueId,
                                                                   command="""Update summary and description with connection.updateIssue method"""
@@ -208,7 +206,7 @@ def Main(sendTo, subject, yamlMessage):
                                                                       messages['Text'])
                                                                   ))
         connection.executeCommand(issueId=issueId,
-                                  command="",
+                                  command="comment",
                                   comment=settings.YT_COMMENT.format(
                                       status=messages['Status'],
                                       text=messages['Text'])
@@ -230,13 +228,13 @@ def Main(sendTo, subject, yamlMessage):
             ExecAndLog(connection, issueId, command="State Завершена")
         else:
             if issue['State'] == u"Открыта":
-                ExecAndLog(connection, issueId, command="State Исполнение не планируется")
+                ExecAndLog(connection, issueId, command="State Требует анализа проблемы")
 
         logger.debug("Run command in {issueId}: {command}".format(issueId=issueId,
                                                                   command="""Now is OK {}""".format(messages['Text'])
                                                                   ))
         connection.executeCommand(issueId=issueId,
-                                  command="",
+                                  command="comment",
                                   comment=settings.YT_COMMENT.format(
                                       status=messages['Status'],
                                       text=messages['Text'])
@@ -263,4 +261,3 @@ if __name__ == "__main__":
     except Exception:
         logger.exception("Exit with error")  # Output exception
         exit(1)
-
